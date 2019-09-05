@@ -825,6 +825,9 @@ int tegra_channel_write_blobs(struct tegra_channel *chan)
 	if (!sd)
 		return -EINVAL;
 
+	if(!strncmp("tc358840", sd->name, 8))
+			goto no_camera_data;
+
 	s_data = to_camera_common_data(sd->dev);
 	if (!s_data)
 		return 0;
@@ -833,6 +836,9 @@ int tegra_channel_write_blobs(struct tegra_channel *chan)
 		return 0;
 
 	return tegracam_write_blobs(s_data->tegracam_ctrl_hdl);
+
+	no_camera_data:
+	return 0;
 }
 
 int tegra_channel_set_stream(struct tegra_channel *chan, bool on)

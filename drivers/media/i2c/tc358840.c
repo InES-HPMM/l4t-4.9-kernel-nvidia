@@ -630,6 +630,9 @@ static int enable_stream(struct v4l2_subdev *sd, bool enable)
 
 	u32 sync_timeout_ctr;
 
+	enum tc358840_csi_port port;
+	u16 base_addr;
+
 	v4l2_dbg(2, debug, sd, "%s: %sable\n", __func__, enable ? "en" : "dis");
 
 	if (enable == state->enabled)
@@ -650,8 +653,24 @@ static int enable_stream(struct v4l2_subdev *sd, bool enable)
 			i2c_wr32_and_or(sd, FUNCMODE, 0, MASK_CONTCLKMODE);
 		}
 #else
-		i2c_wr32_and_or(sd, FUNCMODE, ~(MASK_CONTCLKMODE),
-				MASK_FORCESTOP);
+		// i2c_wr32_and_or(sd, FUNCMODE, ~(MASK_CONTCLKMODE),
+		// 		MASK_FORCESTOP);
+				/*
+		 * Workaround: The TC358840 chip stops working after 7 lines
+		 * in non-continuous clock mode. Thus, always use continuous
+		 * clock.
+		 */
+		for (port = CSI_TX_0; port <= CSI_TX_1; port++) {
+			base_addr = (port == CSI_TX_0) ? CSITX0_BASE_ADDR :
+							 CSITX1_BASE_ADDR;
+
+			/* It is critical for CSI receiver to see lane transition
+			 * LP11->HS. Set to non-continuous mode to enable clock lane
+			 * LP11 state. */
+			i2c_wr32_and_or(sd, base_addr + FUNCMODE, ~(MASK_CONTCLKMODE), 0);
+			/* Set to continuous mode to trigger LP11->HS transition */
+			i2c_wr32_and_or(sd, base_addr + FUNCMODE, 0, MASK_CONTCLKMODE);
+		}
 #endif
 		/* Unmute video */
 		i2c_wr8(sd, VI_MUTE, MASK_AUTO_MUTE);
@@ -1097,6 +1116,8 @@ static void tc358840_format_change(struct v4l2_subdev *sd)
 				"tc358840_format_change: New format: ",
 				&timings, false);
 	}
+
+	tc358840_s_dv_timings(sd, &timings);
 
 	/* Application gets notified after CSI Tx's are reset */
 	if (sd->devnode)
@@ -2188,8 +2209,8 @@ static bool tc358840_parse_dt(struct tc358840_platform_data *pdata,
 static int tc358840_pwr_init(struct tc358840_platform_data *pdata,
 		struct i2c_client *client)
 {
-	struct device_node *node = client->dev.of_node;
-	int cam2_rst;
+	// struct device_node *node = client->dev.of_node;
+	// int cam2_rst;
 	int err;
 	struct regulator *dvdd;
 	struct regulator *iovdd;
@@ -2207,15 +2228,15 @@ static int tc358840_pwr_init(struct tc358840_platform_data *pdata,
 	}
 
 	/*  cam2 rst */
-	cam2_rst = of_get_named_gpio(node, "cam2_rst", 0);
-	if (cam2_rst == 0)
-		return false;
-	err = gpio_request(cam2_rst, "cam2-rst");
-	if (err < 0)
-		dev_err(&client->dev,
-				"cam2 rst gpio request failed %d\n", err);
+	// cam2_rst = of_get_named_gpio(node, "cam2_rst", 0);
+	// if (cam2_rst == 0)
+	// 	return false;
+	// err = gpio_request(cam2_rst, "cam2-rst");
+	// if (err < 0)
+	// 	dev_err(&client->dev,
+	// 			"cam2 rst gpio request failed %d\n", err);
 
-	gpio_direction_output(cam2_rst, 1);
+	// gpio_direction_output(cam2_rst, 1);
 
 	if (dvdd) {
 		err = regulator_enable(dvdd);
@@ -2231,7 +2252,7 @@ static int tc358840_pwr_init(struct tc358840_platform_data *pdata,
 			return -EINVAL;
 		}
 	}
-	gpio_direction_output(cam2_rst, 1);
+	// gpio_direction_output(cam2_rst, 1);
 
 	return true;
 }
